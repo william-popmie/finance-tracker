@@ -1,0 +1,48 @@
+-- Seeded two-level category taxonomy. Fixed set keeps aggregations and
+-- charts meaningful; colors are used across dashboard + badges.
+
+insert into categories (name, color, icon) values
+  ('Groceries',      '#16a34a', 'shopping-cart'),
+  ('Dining & Drinks','#d97706', 'utensils'),
+  ('Transport',      '#2563eb', 'bus'),
+  ('Housing',        '#7c3aed', 'home'),
+  ('Tech',           '#0891b2', 'cpu'),
+  ('School',         '#db2777', 'graduation-cap'),
+  ('Health',         '#dc2626', 'heart-pulse'),
+  ('Entertainment',  '#ea580c', 'party-popper'),
+  ('Shopping',       '#9333ea', 'shopping-bag'),
+  ('Transfers',      '#64748b', 'arrow-left-right'),
+  ('Income',         '#0d9488', 'banknote'),
+  ('Other',          '#94a3b8', 'circle-dashed');
+
+insert into categories (name, parent_id) values
+  ('Restaurants',           (select id from categories where name = 'Dining & Drinks' and parent_id is null)),
+  ('Cafés & Bars',          (select id from categories where name = 'Dining & Drinks' and parent_id is null)),
+  ('Takeaway & Delivery',   (select id from categories where name = 'Dining & Drinks' and parent_id is null)),
+  ('Public transport',      (select id from categories where name = 'Transport' and parent_id is null)),
+  ('Fuel',                  (select id from categories where name = 'Transport' and parent_id is null)),
+  ('Taxi & rideshare',      (select id from categories where name = 'Transport' and parent_id is null)),
+  ('Rent',                  (select id from categories where name = 'Housing' and parent_id is null)),
+  ('Utilities',             (select id from categories where name = 'Housing' and parent_id is null)),
+  ('Internet & telecom',    (select id from categories where name = 'Housing' and parent_id is null)),
+  ('Insurance',             (select id from categories where name = 'Housing' and parent_id is null)),
+  ('Electronics',           (select id from categories where name = 'Tech' and parent_id is null)),
+  ('Software & subscriptions', (select id from categories where name = 'Tech' and parent_id is null)),
+  ('Tuition & fees',        (select id from categories where name = 'School' and parent_id is null)),
+  ('Books & supplies',      (select id from categories where name = 'School' and parent_id is null)),
+  ('Pharmacy',              (select id from categories where name = 'Health' and parent_id is null)),
+  ('Doctor & hospital',     (select id from categories where name = 'Health' and parent_id is null)),
+  ('Sports & fitness',      (select id from categories where name = 'Health' and parent_id is null)),
+  ('Events & concerts',     (select id from categories where name = 'Entertainment' and parent_id is null)),
+  ('Streaming',             (select id from categories where name = 'Entertainment' and parent_id is null)),
+  ('Games',                 (select id from categories where name = 'Entertainment' and parent_id is null)),
+  ('Clothing',              (select id from categories where name = 'Shopping' and parent_id is null)),
+  ('Online shopping',       (select id from categories where name = 'Shopping' and parent_id is null)),
+  ('Home & furniture',      (select id from categories where name = 'Shopping' and parent_id is null)),
+  ('To friends & family',   (select id from categories where name = 'Transfers' and parent_id is null)),
+  ('From friends & family', (select id from categories where name = 'Transfers' and parent_id is null)),
+  ('Between own accounts',  (select id from categories where name = 'Transfers' and parent_id is null)),
+  ('ATM withdrawal',        (select id from categories where name = 'Transfers' and parent_id is null)),
+  ('Salary',                (select id from categories where name = 'Income' and parent_id is null)),
+  ('Refunds',               (select id from categories where name = 'Income' and parent_id is null)),
+  ('Other income',          (select id from categories where name = 'Income' and parent_id is null));
