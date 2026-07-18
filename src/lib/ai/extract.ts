@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { anthropic, MODELS } from "./config";
+import { generateJson, MODELS } from "./config";
 
 const isoDate = z
   .string()
@@ -51,44 +50,18 @@ Rules:
 export async function extractFromPdf(
   pdfBase64: string
 ): Promise<ExtractedStatement> {
-  // Streamed: max_tokens is high enough (long statements, many rows) that
-  // the SDK requires streaming to avoid a >10min non-streaming request.
-  const stream = anthropic().messages.stream({
+  return generateJson({
     model: MODELS.extract,
-    max_tokens: 32000,
+    schema: ExtractedStatementSchema,
     system: EXTRACT_SYSTEM,
-    messages: [
+    parts: [
+      { inlineData: { mimeType: "application/pdf", data: pdfBase64 } },
       {
-        role: "user",
-        content: [
-          {
-            type: "document",
-            source: {
-              type: "base64",
-              media_type: "application/pdf",
-              data: pdfBase64,
-            },
-          },
-          {
-            type: "text",
-            text: "Extract all transactions and statement metadata from this bank statement.",
-          },
-        ],
+        text: "Extract all transactions and statement metadata from this bank statement.",
       },
     ],
-    output_config: {
-      format: zodOutputFormat(ExtractedStatementSchema),
-    },
+    maxOutputTokens: 65536, // long statements, many rows
   });
-
-  const response = await stream.finalMessage();
-  const parsed = response.parsed_output;
-  if (!parsed) {
-    throw new Error(
-      `Statement extraction failed (stop_reason: ${response.stop_reason})`
-    );
-  }
-  return parsed;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,27 +100,17 @@ export async function mapCsvColumns(
   headers: string[],
   sampleRows: Record<string, string>[]
 ): Promise<CsvMapping> {
-  const response = await anthropic().messages.parse({
+  return generateJson({
     model: MODELS.extract,
-    max_tokens: 2000,
+    schema: CsvMappingSchema,
     system:
       "You map bank-CSV export columns onto a normalized transaction schema. Column names may be in Dutch, French, or English (Belgian banks). Answer strictly from the provided headers and sample rows.",
-    messages: [
+    parts: [
       {
-        role: "user",
-        content: `CSV headers:\n${JSON.stringify(headers)}\n\nSample rows:\n${JSON.stringify(sampleRows.slice(0, 5), null, 2)}\n\nProduce the column mapping. Use null for fields that have no matching column. Every column name you output must be copied exactly from the headers list.`,
+        text: `CSV headers:\n${JSON.stringify(headers)}\n\nSample rows:\n${JSON.stringify(sampleRows.slice(0, 5), null, 2)}\n\nProduce the column mapping. Use null for fields that have no matching column. Every column name you output must be copied exactly from the headers list.`,
       },
     ],
-    output_config: {
-      format: zodOutputFormat(CsvMappingSchema),
-    },
+    maxOutputTokens: 2000,
+    thinkingBudget: 0,
   });
-
-  const parsed = response.parsed_output;
-  if (!parsed) {
-    throw new Error(
-      `CSV column mapping failed (stop_reason: ${response.stop_reason})`
-    );
-  }
-  return parsed;
 }

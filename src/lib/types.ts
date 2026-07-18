@@ -39,6 +39,7 @@ export type Merchant = {
   website: string | null;
   default_category_id: string | null;
   match_patterns: string[];
+  default_tags: string[];
   created_at: string;
 };
 
@@ -59,7 +60,21 @@ export type Transaction = {
   tags: string[];
   notes: string | null;
   dedupe_hash: string;
+  bank_reference: string | null;
   created_at: string;
+};
+
+export type CategorizationRun = {
+  id: string;
+  status: "running" | "done" | "error";
+  trigger: "import" | "manual";
+  total: number;
+  pattern_matched: number;
+  ai_resolved: number;
+  error_msg: string | null;
+  started_at: string;
+  updated_at: string;
+  finished_at: string | null;
 };
 
 export type TransactionWithRelations = Transaction & {

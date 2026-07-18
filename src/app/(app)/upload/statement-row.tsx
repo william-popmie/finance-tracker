@@ -32,7 +32,7 @@ export function StatementRow({ statement }: { statement: Statement }) {
   }
 
   return (
-    <li className="flex items-center justify-between gap-4 py-3 text-sm">
+    <div className="flex items-center justify-between gap-4 py-3 text-sm">
       <div className="min-w-0">
         <p className="truncate font-medium">{statement.file_name}</p>
         <p className="text-xs text-muted-foreground">
@@ -56,6 +56,6 @@ export function StatementRow({ statement }: { statement: Statement }) {
           {busy ? "Parsing…" : "Re-parse"}
         </Button>
       </div>
-    </li>
+    </div>
   );
 }

@@ -50,6 +50,7 @@ export interface Database {
     website: string | null;
     default_category_id: string | null;
     match_patterns: ColumnType<string[], string[] | undefined, string[]>;
+    default_tags: ColumnType<string[], string[] | undefined, string[]>;
     created_at: Timestamp;
   };
   transactions: {
@@ -69,7 +70,24 @@ export interface Database {
     tags: ColumnType<string[], string[] | undefined, string[]>;
     notes: string | null;
     dedupe_hash: string;
+    bank_reference: string | null;
     created_at: Timestamp;
+  };
+  categorization_runs: {
+    id: Generated<string>;
+    status: ColumnType<
+      "running" | "done" | "error",
+      "running" | "done" | "error" | undefined,
+      "running" | "done" | "error"
+    >;
+    trigger: "import" | "manual";
+    total: ColumnType<number, number | undefined, number>;
+    pattern_matched: ColumnType<number, number | undefined, number>;
+    ai_resolved: ColumnType<number, number | undefined, number>;
+    error_msg: string | null;
+    started_at: Timestamp;
+    updated_at: Timestamp;
+    finished_at: string | null;
   };
   csv_mappings: {
     id: Generated<string>;

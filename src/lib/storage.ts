@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
@@ -24,4 +24,13 @@ export async function readUpload(storagePath: string): Promise<Buffer> {
     throw new Error("Invalid storage path");
   }
   return readFile(resolved);
+}
+
+/** Delete a stored statement file; missing files are ignored. */
+export async function deleteUpload(storagePath: string): Promise<void> {
+  const resolved = path.resolve(UPLOAD_DIR, storagePath);
+  if (!resolved.startsWith(UPLOAD_DIR + path.sep)) {
+    throw new Error("Invalid storage path");
+  }
+  await rm(resolved, { force: true });
 }

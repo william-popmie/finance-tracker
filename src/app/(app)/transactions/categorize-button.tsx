@@ -17,9 +17,7 @@ export function CategorizeButton() {
       const res = await fetch("/api/categorize", { method: "POST" });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed");
-      setResult(
-        `${body.patternMatched} matched from cache, ${body.aiResolved} resolved by AI`
-      );
+      // Run started in the background — CategorizationStatus takes over.
       router.refresh();
     } catch (err) {
       setResult(err instanceof Error ? err.message : String(err));
