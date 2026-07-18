@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { saveUpload } from "@/lib/storage";
+import { log } from "@/lib/log";
 
 const MAX_SIZE = 25 * 1024 * 1024; // 25 MB
 
@@ -22,8 +23,10 @@ export async function POST(req: Request) {
     );
   }
 
+  log("upload", `received ${file.name} (${ext}, ${(file.size / 1024).toFixed(0)} KB)`);
   const buffer = Buffer.from(await file.arrayBuffer());
   const storagePath = await saveUpload(buffer, file.name);
+  log("upload", `stored at ${storagePath}`);
 
   const statement = await db
     .insertInto("statements")
@@ -34,6 +37,7 @@ export async function POST(req: Request) {
     })
     .returning("id")
     .executeTakeFirstOrThrow();
+  log("upload", `statement row ${statement.id} created`);
 
   return NextResponse.json({ id: statement.id });
 }

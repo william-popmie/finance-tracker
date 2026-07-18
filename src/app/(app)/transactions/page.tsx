@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { TransactionsTable } from "./transactions-table";
 import { CategorizeButton } from "./categorize-button";
+import { CategorizationStatus } from "./categorization-status";
 
 export const dynamic = "force-dynamic";
 
@@ -122,6 +123,7 @@ export default async function TransactionsPage({
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Transactions</h1>
         <div className="flex items-center gap-3">
+          <CategorizationStatus />
           <p className="text-sm text-muted-foreground">{total} results</p>
           <CategorizeButton />
         </div>

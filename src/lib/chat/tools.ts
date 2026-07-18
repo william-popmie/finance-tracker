@@ -1,4 +1,4 @@
-import type Anthropic from "@anthropic-ai/sdk";
+import type { FunctionDeclaration } from "@google/genai";
 import type { Db } from "@/lib/db";
 import type { Category } from "@/lib/types";
 import type {
@@ -68,15 +68,13 @@ const FILTER_REQUIRED = [
   "max_amount",
 ];
 
-export const CHAT_TOOLS: Anthropic.Tool[] = [
+export const CHAT_TOOLS: FunctionDeclaration[] = [
   {
     name: "query_transactions",
     description:
       "List individual transactions matching filters, newest first. Use this when the user wants to see specific transactions. Returns up to 50 rows plus the total count and sum of ALL matches.",
-    strict: true,
-    input_schema: {
+    parametersJsonSchema: {
       type: "object",
-      additionalProperties: false,
       required: FILTER_REQUIRED,
       properties: FILTER_PROPS,
     },
@@ -85,10 +83,8 @@ export const CHAT_TOOLS: Anthropic.Tool[] = [
     name: "aggregate_transactions",
     description:
       "Sum and count transactions grouped by category, merchant, month, or tag — use this for 'how much did I spend on X' questions and for spotting missing months in recurring payments (group_by: 'month').",
-    strict: true,
-    input_schema: {
+    parametersJsonSchema: {
       type: "object",
-      additionalProperties: false,
       required: ["group_by", ...FILTER_REQUIRED],
       properties: {
         group_by: {
@@ -103,22 +99,14 @@ export const CHAT_TOOLS: Anthropic.Tool[] = [
     name: "list_categories",
     description:
       "List the category taxonomy (category paths) so filters use exact names.",
-    strict: true,
-    input_schema: {
-      type: "object",
-      additionalProperties: false,
-      required: [],
-      properties: {},
-    },
+    parametersJsonSchema: { type: "object", properties: {} },
   },
   {
     name: "search_merchants",
     description:
       "Find known merchants by name (partial match) — useful to resolve what the user calls a shop into the exact merchant name.",
-    strict: true,
-    input_schema: {
+    parametersJsonSchema: {
       type: "object",
-      additionalProperties: false,
       required: ["query"],
       properties: {
         query: { type: "string" },
@@ -129,25 +117,13 @@ export const CHAT_TOOLS: Anthropic.Tool[] = [
     name: "get_open_insights",
     description:
       "List the system's open proactive flags (missed recurring payments, doubled payments, missing reimbursements, unusual amounts). Check these when the user asks about missed rent, pending repayments, or anything the tracker might already have flagged.",
-    strict: true,
-    input_schema: {
-      type: "object",
-      additionalProperties: false,
-      required: [],
-      properties: {},
-    },
+    parametersJsonSchema: { type: "object", properties: {} },
   },
   {
     name: "list_expectations",
     description:
       "List tracked expectations: recurring payments being monitored (rent, subscriptions) and reimbursement/split-payment trackers with their status.",
-    strict: true,
-    input_schema: {
-      type: "object",
-      additionalProperties: false,
-      required: [],
-      properties: {},
-    },
+    parametersJsonSchema: { type: "object", properties: {} },
   },
 ];
 

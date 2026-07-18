@@ -56,7 +56,11 @@ export function UploadDropzone() {
 
           update({
             status: "done",
-            message: `${body.inserted} new transactions (${body.skipped} duplicates skipped)`,
+            message:
+              `${body.inserted} new transactions (${body.skipped} duplicates skipped)` +
+              (body.categorizationStarted
+                ? " · categorizing in background — see Transactions"
+                : ""),
           });
           router.refresh();
         } catch (err) {

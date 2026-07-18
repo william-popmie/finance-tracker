@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { MessageSquarePlus, Trash2, X } from "lucide-react";
 import type { Category, TransactionWithRelations } from "@/lib/types";
-import { updateTransaction } from "./actions";
+import { parseBnpDescriptor } from "@/lib/statements/bnp";
+import { deleteTransactions, updateTransaction } from "./actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -51,8 +54,41 @@ export function TransactionsTable({
   const [editing, setEditing] = useState<TransactionWithRelations | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkPending, startBulkTransition] = useTransition();
+
+  // Reset selection when the row set changes (pagination, filters, refresh).
+  const rowKey = transactions.map((t) => t.id).join(",");
+  useEffect(() => setSelected(new Set()), [rowKey]);
 
   const paths = categoryPaths(categories);
+  const allSelected =
+    transactions.length > 0 && transactions.every((t) => selected.has(t.id));
+
+  function toggle(id: string) {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(transactions.map((t) => t.id)));
+  }
+
+  function handleBulkDelete() {
+    const ids = [...selected];
+    if (!confirm(`Delete ${ids.length} transaction${ids.length === 1 ? "" : "s"}? This cannot be undone.`)) {
+      return;
+    }
+    startBulkTransition(async () => {
+      await deleteTransactions(ids);
+      setSelected(new Set());
+      router.refresh();
+    });
+  }
 
   function handleSave(formData: FormData) {
     if (!editing) return;
@@ -92,10 +128,18 @@ export function TransactionsTable({
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-8">
+              <Checkbox
+                checked={allSelected}
+                indeterminate={selected.size > 0 && !allSelected}
+                onChange={toggleAll}
+                aria-label="Select all"
+              />
+            </TableHead>
             <TableHead className="w-28">Date</TableHead>
-            <TableHead>Description</TableHead>
+            <TableHead>Merchant</TableHead>
             <TableHead>Category</TableHead>
-            <TableHead>Account</TableHead>
+            <TableHead>Tags</TableHead>
             <TableHead className="text-right">Amount</TableHead>
           </TableRow>
         </TableHeader>
@@ -106,28 +150,25 @@ export function TransactionsTable({
               className="cursor-pointer"
               onClick={() => setEditing(t)}
             >
+              <TableCell onClick={(e) => e.stopPropagation()}>
+                <Checkbox
+                  checked={selected.has(t.id)}
+                  onChange={() => toggle(t.id)}
+                  aria-label="Select row"
+                />
+              </TableCell>
               <TableCell className="whitespace-nowrap text-muted-foreground">
                 {t.booking_date}
               </TableCell>
               <TableCell className="max-w-md">
+                {/* Clean name only — the raw descriptor lives in the edit
+                    dialog (click the row). */}
                 <p className="truncate font-medium">
                   {t.merchants?.canonical_name ||
                     t.description ||
                     t.counterparty_name ||
-                    t.raw_description}
+                    t.raw_description.replace(/\s+/g, " ")}
                 </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {t.raw_description}
-                </p>
-                {t.tags.length > 0 && (
-                  <p className="mt-0.5 flex flex-wrap gap-1">
-                    {t.tags.map((tag) => (
-                      <Badge key={tag} variant="outline" className="text-[10px]">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </p>
-                )}
               </TableCell>
               <TableCell>
                 {t.categories ? (
@@ -148,8 +189,26 @@ export function TransactionsTable({
                   <span className="text-xs text-muted-foreground">—</span>
                 )}
               </TableCell>
-              <TableCell className="text-xs text-muted-foreground">
-                {t.accounts?.name ?? "—"}
+              <TableCell>
+                {t.tags.length > 0 ? (
+                  <span className="flex flex-wrap items-center gap-1">
+                    {t.tags.slice(0, 2).map((tag) => (
+                      <Badge key={tag} variant="outline" className="text-[10px]">
+                        {tag}
+                      </Badge>
+                    ))}
+                    {t.tags.length > 2 && (
+                      <span
+                        className="text-[10px] text-muted-foreground"
+                        title={t.tags.slice(2).join(", ")}
+                      >
+                        +{t.tags.length - 2}
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
               </TableCell>
               <TableCell
                 className={`whitespace-nowrap text-right font-medium ${
@@ -162,6 +221,39 @@ export function TransactionsTable({
           ))}
         </TableBody>
       </Table>
+
+      {selected.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-lg border bg-background px-4 py-2 shadow-lg">
+          <span className="text-sm font-medium">{selected.size} selected</span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              router.push(`/chat?tx=${[...selected].join(",")}`)
+            }
+          >
+            <MessageSquarePlus className="h-3.5 w-3.5" />
+            Add to chat ({selected.size})
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            disabled={bulkPending}
+            onClick={handleBulkDelete}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            {bulkPending ? "Deleting…" : `Delete (${selected.size})`}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setSelected(new Set())}
+            aria-label="Clear selection"
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
 
       <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent className="sm:max-w-md">
@@ -182,7 +274,12 @@ export function TransactionsTable({
                   <Input
                     id="merchant"
                     name="merchant"
-                    defaultValue={editing.merchants?.canonical_name ?? ""}
+                    defaultValue={
+                      editing.merchants?.canonical_name ??
+                      parseBnpDescriptor(editing.raw_description)
+                        .merchantCandidate ??
+                      ""
+                    }
                     placeholder="e.g. Carrefour Express"
                   />
                 </div>

@@ -53,6 +53,11 @@ export type ChatEvent =
 export type StoredMessage = {
   id: string;
   role: "user" | "assistant";
-  content: { text?: string; blocks?: AssistantBlock[] };
+  content: {
+    text?: string;
+    blocks?: AssistantBlock[];
+    /** Transactions attached as context via "Add to chat". */
+    contextTransactionIds?: string[];
+  };
   created_at: string;
 };
