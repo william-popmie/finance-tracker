@@ -1,7 +1,8 @@
 import type { Content, Part, FunctionCall } from "@google/genai";
 import { db } from "@/lib/db";
 import { gemini, MODELS } from "@/lib/ai/config";
-import { CHAT_TOOLS, executeTool } from "@/lib/chat/tools";
+import { CHAT_TOOLS, categoryTaxonomy, executeTool } from "@/lib/chat/tools";
+import { rebuildPriorTurns } from "@/lib/chat/history";
 import type { AssistantBlock, ChatEvent, StoredMessage } from "@/lib/chat/types";
 import { log, logError } from "@/lib/log";
 
@@ -12,9 +13,12 @@ const MAX_CONTEXT_TX = 100;
 const SYSTEM_STABLE = `You are the AI assistant inside a personal finance tracker. The user is Belgian; amounts are in EUR unless stated otherwise. Their bank transactions live in a database you query through tools.
 
 How to work:
+- Every number, transaction, or list you state MUST come from a tool call in THIS conversation turn. Never answer a data question from memory or from your own earlier messages — earlier results may be stale or partial; re-run the query.
+- When a follow-up asks to break down, expand, or list data you previously summarized, call the tools again with the appropriate filters rather than reconstructing from the prior answer.
 - Use aggregate_transactions for "how much" questions and for recurring-payment checks (group_by "month" reveals missing or double months).
-- Use query_transactions when the user should see the individual transactions.
-- If a category or merchant name might not match exactly, check with list_categories / search_merchants first.
+- Use query_transactions when the user should see the individual transactions. If it returns truncated=true and the user wants the full list, page through with offset/limit.
+- If a tool returns zero rows, say no matching transactions were found — never invent example transactions.
+- If a merchant name might not match exactly, check with search_merchants first.
 - Tool results are ALSO shown to the user as tables and charts, so don't repeat every row in prose — summarize the answer and point out what matters (totals, anomalies, missing months, who still owes money).
 - Amounts are signed: negative = money out. When reporting "spending", use the spent totals.
 - Be concise and concrete. Lead with the answer, then the supporting detail.
@@ -91,9 +95,10 @@ export async function POST(req: Request) {
     convId = conv.id;
   }
 
-  // Prior turns (text only — tool renders are UI artifacts; the assistant's
-  // prose carries the durable context). User turns with attached transactions
-  // get their context block re-prepended so follow-ups keep the context.
+  // Prior turns are replayed with their tool calls and results (see
+  // rebuildPriorTurns), so follow-ups stay grounded in data instead of the
+  // assistant's prose. User turns with attached transactions get their
+  // context block re-prepended so follow-ups keep the context.
   const history = (await db
     .selectFrom("chat_messages")
     .select(["id", "role", "content", "created_at"])
@@ -114,33 +119,18 @@ export async function POST(req: Request) {
     })
     .execute();
 
-  const priorTurns: Content[] = [];
-  for (const m of history) {
-    if (m.role === "user") {
-      if (!m.content.text) continue;
-      priorTurns.push({
-        role: "user",
-        parts: [
-          {
-            text: await userTurnText(
-              m.content.text,
-              m.content.contextTransactionIds
-            ),
-          },
-        ],
-      });
-    } else {
-      const text = (m.content.blocks ?? [])
-        .filter((b): b is Extract<AssistantBlock, { type: "text" }> => b.type === "text")
-        .map((b) => b.text)
-        .join("\n");
-      if (text) priorTurns.push({ role: "model", parts: [{ text }] });
-    }
-  }
+  const priorTurns = await rebuildPriorTurns(history, userTurnText);
 
   const encoder = new TextEncoder();
   const conversationIdFinal = convId!;
   const userText = await userTurnText(message, contextTransactionIds);
+  const taxonomy = await categoryTaxonomy(db);
+  const systemInstruction = `${SYSTEM_STABLE}
+
+Category taxonomy (use these exact names in the category filter; a parent name includes its children):
+${taxonomy}
+
+Today's date: ${new Date().toISOString().slice(0, 10)}`;
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -167,9 +157,10 @@ export async function POST(req: Request) {
             model: MODELS.chat,
             contents,
             config: {
-              systemInstruction: `${SYSTEM_STABLE}\n\nToday's date: ${new Date().toISOString().slice(0, 10)}`,
+              systemInstruction,
               tools: [{ functionDeclarations: CHAT_TOOLS }],
-              maxOutputTokens: 4000,
+              maxOutputTokens: 8000,
+              temperature: 0.2,
             },
           });
 
@@ -202,9 +193,16 @@ export async function POST(req: Request) {
                 name,
                 call.args ?? {}
               );
-              if (render) {
-                blocks.push({ type: "tool", label, render });
-              }
+              // Persist every call (render or not) with its args and result
+              // so history replay can re-ground follow-up questions.
+              blocks.push({
+                type: "tool",
+                label,
+                render,
+                name,
+                args: (call.args ?? {}) as Record<string, unknown>,
+                forModel: forModel.slice(0, 6000),
+              });
               emit({ type: "tool_result", label, render });
               responseParts.push({
                 functionResponse: { name, response: { result: forModel } },

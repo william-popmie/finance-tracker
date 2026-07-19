@@ -16,7 +16,10 @@ export type TxRow = {
 export type QueryTransactionsResult = {
   rows: TxRow[];
   total_count: number;
+  /** Net / spent / received over ALL matches, not just the returned page. */
   total_amount: number;
+  total_spent?: number;
+  total_received?: number;
   truncated: boolean;
 };
 
@@ -31,6 +34,8 @@ export type AggregateBucket = {
 export type AggregateResult = {
   group_by: "category" | "merchant" | "month" | "tag";
   buckets: AggregateBucket[];
+  /** True number of groups; buckets is truncated when this is larger. */
+  bucket_count?: number;
 };
 
 export type ToolRenderData =
@@ -40,7 +45,19 @@ export type ToolRenderData =
 /** One block of an assistant message, in display order. */
 export type AssistantBlock =
   | { type: "text"; text: string }
-  | { type: "tool"; label: string; render: ToolRenderData | null };
+  | {
+      type: "tool";
+      label: string;
+      render: ToolRenderData | null;
+      /**
+       * Tool call + result as the model saw them, so history replay can
+       * reconstruct real functionCall/functionResponse turns. Optional —
+       * absent on messages persisted before this was added.
+       */
+      name?: string;
+      args?: Record<string, unknown>;
+      forModel?: string;
+    };
 
 export type ChatEvent =
   | { type: "conversation"; id: string }
