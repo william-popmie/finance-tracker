@@ -119,12 +119,14 @@ export default async function TransactionsPage({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Transactions</h1>
+    <div className="space-y-5">
+      <div className="flex items-end justify-between">
+        <div>
+          <p className="eyebrow">{total} results</p>
+          <h1 className="mt-1 text-3xl font-medium tracking-tight">Transactions</h1>
+        </div>
         <div className="flex items-center gap-3">
           <CategorizationStatus />
-          <p className="text-sm text-muted-foreground">{total} results</p>
           <CategorizeButton />
         </div>
       </div>

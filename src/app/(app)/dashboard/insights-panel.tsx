@@ -34,9 +34,9 @@ const SEVERITY_ICON = {
 };
 
 const SEVERITY_COLOR = {
-  info: "text-sky-600",
-  warning: "text-amber-600",
-  alert: "text-[#e11d48]",
+  info: "text-muted-foreground",
+  warning: "text-[#c79a5b]",
+  alert: "text-neg",
 };
 
 export function InsightsPanel({
@@ -53,7 +53,7 @@ export function InsightsPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Needs your attention</CardTitle>
+        <CardTitle>Needs your attention</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {proposals.map((p) => (

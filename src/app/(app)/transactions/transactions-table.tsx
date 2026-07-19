@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { MessageSquarePlus, Trash2, X } from "lucide-react";
 import type { Category, TransactionWithRelations } from "@/lib/types";
 import { parseBnpDescriptor } from "@/lib/statements/bnp";
+import { categoryColor } from "@/lib/category-colors";
 import { deleteTransactions, updateTransaction } from "./actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -157,7 +158,7 @@ export function TransactionsTable({
                   aria-label="Select row"
                 />
               </TableCell>
-              <TableCell className="whitespace-nowrap text-muted-foreground">
+              <TableCell className="figure whitespace-nowrap text-xs text-muted-foreground">
                 {t.booking_date}
               </TableCell>
               <TableCell className="max-w-md">
@@ -174,14 +175,10 @@ export function TransactionsTable({
                 {t.categories ? (
                   <Badge
                     variant="secondary"
-                    style={
-                      t.categories.color
-                        ? {
-                            backgroundColor: `${t.categories.color}20`,
-                            color: t.categories.color,
-                          }
-                        : undefined
-                    }
+                    style={{
+                      backgroundColor: `${categoryColor(t.categories.name)}22`,
+                      color: categoryColor(t.categories.name),
+                    }}
                   >
                     {t.categories.name}
                   </Badge>
@@ -211,8 +208,8 @@ export function TransactionsTable({
                 )}
               </TableCell>
               <TableCell
-                className={`whitespace-nowrap text-right font-medium ${
-                  t.amount < 0 ? "text-red-600" : "text-emerald-600"
+                className={`figure whitespace-nowrap text-right font-medium ${
+                  t.amount < 0 ? "text-foreground" : "text-pos"
                 }`}
               >
                 {eur(Number(t.amount), t.currency)}
