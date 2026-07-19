@@ -69,7 +69,7 @@ type RecordResolution = z.infer<typeof RecordResolutionSchema>;
 const CATEGORIZE_SYSTEM = `You categorize one bank transaction from a Belgian bank statement (descriptors are messy: card numbers, reference codes, Dutch/French text).
 
 1. Identify the merchant behind the raw descriptor. Well-known names (Carrefour, Colruyt, Spar, bol.com, Amazon, Delhaize...) you know directly.
-2. Pick the single best category_path from the provided list. Person-to-person transfers use the Transfers paths; salary and refunds use Income paths.
+2. Pick the single best category_path from the provided list. Prefer the most specific "Parent > Child" subcategory whenever one clearly fits. Choose a bare top-level category (no "> Child") ONLY when the transaction belongs to that category in general but none of its subcategories apply — this is the "general" bucket for that category. Person-to-person transfers use the Transfers paths; salary and refunds use Income paths.
 3. Give 1-3 short lowercase topical tags (e.g. coffee, groceries, public-transport).
 4. Write a short clean description a human would recognize.
 5. merchant.match_pattern must be the distinctive stable part of the descriptor (the shop name portion), copied verbatim — never a regex, card number, date, or amount.
