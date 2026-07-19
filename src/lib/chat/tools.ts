@@ -1,7 +1,9 @@
 import type { FunctionDeclaration } from "@google/genai";
+import { sql } from "kysely";
 import type { Db } from "@/lib/db";
 import type { Category } from "@/lib/types";
 import type {
+  AggregateBucket,
   AggregateResult,
   QueryTransactionsResult,
   ToolRenderData,
@@ -72,17 +74,27 @@ export const CHAT_TOOLS: FunctionDeclaration[] = [
   {
     name: "query_transactions",
     description:
-      "List individual transactions matching filters, newest first. Use this when the user wants to see specific transactions. Returns up to 50 rows plus the total count and sum of ALL matches.",
+      "List individual transactions matching filters, newest first. Use this when the user wants to see specific transactions. Returns `limit` rows (default 50, max 200) starting at `offset`, plus total_count/total_amount/total_spent/total_received computed over ALL matches. If truncated=true and the user asked for a full list, call again with a higher limit or offset to page through.",
     parametersJsonSchema: {
       type: "object",
       required: FILTER_REQUIRED,
-      properties: FILTER_PROPS,
+      properties: {
+        ...FILTER_PROPS,
+        limit: {
+          anyOf: [{ type: "number" }, { type: "null" }],
+          description: "Max rows to return (default 50, max 200)",
+        },
+        offset: {
+          anyOf: [{ type: "number" }, { type: "null" }],
+          description: "Rows to skip, for paging (default 0)",
+        },
+      },
     },
   },
   {
     name: "aggregate_transactions",
     description:
-      "Sum and count transactions grouped by category, merchant, month, or tag — use this for 'how much did I spend on X' questions and for spotting missing months in recurring payments (group_by: 'month').",
+      "Sum and count transactions grouped by category, merchant, month, or tag — use this for 'how much did I spend on X' questions and for spotting missing months in recurring payments (group_by: 'month'). Aggregates over ALL matching transactions in SQL. Returns up to 30 buckets plus bucket_count (the true number of groups; if larger, the list is truncated).",
     parametersJsonSchema: {
       type: "object",
       required: ["group_by", ...FILTER_REQUIRED],
@@ -139,15 +151,57 @@ type Filters = {
   max_amount?: number | null;
 };
 
+async function loadCategories(
+  db: Db
+): Promise<Pick<Category, "id" | "name" | "parent_id">[]> {
+  return db.selectFrom("categories").select(["id", "name", "parent_id"]).execute();
+}
+
+/** "Housing > Rent"-style paths for the full taxonomy, sorted. */
+export async function categoryPaths(db: Db): Promise<string[]> {
+  const categories = await loadCategories(db);
+  const byId = new Map(categories.map((c) => [c.id, c]));
+  return categories
+    .map((c) => {
+      const parent = c.parent_id ? byId.get(c.parent_id) : null;
+      return parent ? `${parent.name} > ${c.name}` : c.name;
+    })
+    .sort();
+}
+
+/** Compact one-line-per-parent taxonomy for the system prompt. */
+export async function categoryTaxonomy(db: Db): Promise<string> {
+  const categories = await loadCategories(db);
+  return categories
+    .filter((c) => !c.parent_id)
+    .map((top) => {
+      const children = categories
+        .filter((c) => c.parent_id === top.id)
+        .map((c) => c.name);
+      return children.length ? `${top.name} (${children.join(", ")})` : top.name;
+    })
+    .join("\n");
+}
+
 async function resolveCategoryIds(db: Db, name: string): Promise<string[]> {
-  const categories: Pick<Category, "id" | "name" | "parent_id">[] = await db
-    .selectFrom("categories")
-    .select(["id", "name", "parent_id"])
-    .execute();
+  const categories = await loadCategories(db);
+  const byId = new Map(categories.map((c) => [c.id, c]));
+  const pathOf = (c: (typeof categories)[number]) => {
+    const parent = c.parent_id ? byId.get(c.parent_id) : null;
+    return parent ? `${parent.name} > ${c.name}` : c.name;
+  };
   const lower = name.trim().toLowerCase();
-  const direct = categories.filter(
-    (c) => c.name.toLowerCase() === lower || c.name.toLowerCase().includes(lower)
+  // Exact match first (on name or full path), then prefix, then substring —
+  // substring-first over-matched (e.g. "Income" also pulled "Other income").
+  let direct = categories.filter(
+    (c) => c.name.toLowerCase() === lower || pathOf(c).toLowerCase() === lower
   );
+  if (direct.length === 0) {
+    direct = categories.filter((c) => c.name.toLowerCase().startsWith(lower));
+  }
+  if (direct.length === 0) {
+    direct = categories.filter((c) => c.name.toLowerCase().includes(lower));
+  }
   const ids = new Set<string>();
   for (const c of direct) {
     ids.add(c.id);
@@ -172,16 +226,25 @@ type FetchedTx = {
   merchant_name: string | null;
 };
 
-async function fetchFiltered(
-  db: Db,
-  filters: Filters,
-  limit: number
-): Promise<{ rows: FetchedTx[]; count: number }> {
-  // Resolve category/merchant name filters to id sets first.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type FilterFn = (qb: any) => any;
+
+/**
+ * Resolves name filters to id sets and returns a function that applies the
+ * full WHERE clause to any query over `transactions`. Throws a descriptive
+ * error on unresolvable category/merchant names — a silent empty result reads
+ * as "no data" to the model and invites made-up answers.
+ */
+async function buildFilter(db: Db, filters: Filters): Promise<FilterFn> {
   let categoryIds: string[] | null = null;
   if (filters.category) {
     categoryIds = await resolveCategoryIds(db, filters.category);
-    if (categoryIds.length === 0) return { rows: [], count: 0 };
+    if (categoryIds.length === 0) {
+      const paths = await categoryPaths(db);
+      throw new Error(
+        `No category matches "${filters.category}". Valid categories: ${paths.join("; ")}`
+      );
+    }
   }
   let merchantIds: string[] | null = null;
   if (filters.merchant) {
@@ -191,12 +254,14 @@ async function fetchFiltered(
       .where("canonical_name", "ilike", `%${filters.merchant}%`)
       .execute();
     merchantIds = merchants.map((m) => m.id);
-    if (merchantIds.length === 0) return { rows: [], count: 0 };
+    if (merchantIds.length === 0) {
+      throw new Error(
+        `No known merchant matches "${filters.merchant}". Use search_merchants to find the exact name, or use the text filter instead.`
+      );
+    }
   }
 
-  // Applies the shared filter set to either the row query or the count query.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const applyFilters = (qb: any): any => {
+  return (qb) => {
     let q = qb;
     if (filters.from) q = q.where("transactions.booking_date", ">=", filters.from);
     if (filters.to) q = q.where("transactions.booking_date", "<=", filters.to);
@@ -214,16 +279,47 @@ async function fetchFiltered(
         ])
       );
     }
+    if (filters.min_amount != null) {
+      q = q.where(sql`abs(transactions.amount)`, ">=", filters.min_amount);
+    }
+    if (filters.max_amount != null) {
+      q = q.where(sql`abs(transactions.amount)`, "<=", filters.max_amount);
+    }
     if (categoryIds) q = q.where("transactions.category_id", "in", categoryIds);
     if (merchantIds) q = q.where("transactions.merchant_id", "in", merchantIds);
     return q;
   };
+}
 
+async function fetchFiltered(
+  db: Db,
+  filters: Filters,
+  limit: number,
+  offset = 0
+): Promise<{
+  rows: FetchedTx[];
+  count: number;
+  total: number;
+  spent: number;
+  received: number;
+}> {
+  const applyFilters = await buildFilter(db, filters);
+
+  // Totals over ALL matches, not just the returned page.
   const countRow = await applyFilters(
-    db.selectFrom("transactions").select(db.fn.countAll().as("count"))
+    db.selectFrom("transactions").select([
+      db.fn.countAll().as("count"),
+      sql<string>`coalesce(sum(transactions.amount), 0)`.as("total"),
+      sql<string>`coalesce(sum(case when transactions.amount < 0 then -transactions.amount else 0 end), 0)`.as(
+        "spent"
+      ),
+      sql<string>`coalesce(sum(case when transactions.amount > 0 then transactions.amount else 0 end), 0)`.as(
+        "received"
+      ),
+    ])
   ).executeTakeFirst();
 
-  let rows: FetchedTx[] = await applyFilters(db.selectFrom("transactions"))
+  const rows: FetchedTx[] = await applyFilters(db.selectFrom("transactions"))
     .leftJoin("categories", "categories.id", "transactions.category_id")
     .leftJoin("merchants", "merchants.id", "transactions.merchant_id")
     .select([
@@ -240,16 +336,16 @@ async function fetchFiltered(
     ])
     .orderBy("transactions.booking_date", "desc")
     .limit(limit)
+    .offset(offset)
     .execute();
 
-  // Absolute-amount bounds are applied in JS (they refer to magnitude).
-  if (filters.min_amount != null) {
-    rows = rows.filter((r) => Math.abs(Number(r.amount)) >= filters.min_amount!);
-  }
-  if (filters.max_amount != null) {
-    rows = rows.filter((r) => Math.abs(Number(r.amount)) <= filters.max_amount!);
-  }
-  return { rows: rows as FetchedTx[], count: Number(countRow?.count ?? 0) };
+  return {
+    rows,
+    count: Number(countRow?.count ?? 0),
+    total: Number(countRow?.total ?? 0),
+    spent: Number(countRow?.spent ?? 0),
+    received: Number(countRow?.received ?? 0),
+  };
 }
 
 function toTxRow(r: FetchedTx): TxRow {
@@ -274,17 +370,28 @@ export async function executeTool(
   const args = (input ?? {}) as Filters & {
     group_by?: AggregateResult["group_by"];
     query?: string;
+    limit?: number | null;
+    offset?: number | null;
   };
 
   switch (name) {
     case "query_transactions": {
-      const { rows, count } = await fetchFiltered(db, args, 50);
+      const limit = Math.min(Math.max(Math.trunc(Number(args.limit) || 50), 1), 200);
+      const offset = Math.max(Math.trunc(Number(args.offset) || 0), 0);
+      const { rows, count, total, spent, received } = await fetchFiltered(
+        db,
+        args,
+        limit,
+        offset
+      );
       const txRows = rows.map(toTxRow);
       const result: QueryTransactionsResult = {
         rows: txRows,
         total_count: count,
-        total_amount: txRows.reduce((s, r) => s + r.amount, 0),
-        truncated: count > txRows.length,
+        total_amount: total,
+        total_spent: spent,
+        total_received: received,
+        truncated: count > offset + txRows.length,
       };
       return {
         forModel: JSON.stringify(result),
@@ -294,38 +401,86 @@ export async function executeTool(
     }
 
     case "aggregate_transactions": {
-      const { rows } = await fetchFiltered(db, args, 5000);
       const groupBy = args.group_by ?? "category";
-      const buckets = new Map<
-        string,
-        { spent: number; received: number; net: number; count: number }
-      >();
-      for (const r of rows) {
-        const amount = Number(r.amount);
-        const key =
+      let sorted: AggregateBucket[];
+      let bucketCount: number;
+
+      if (groupBy === "tag") {
+        // tags is an array column; bucketing the (bounded) rows in JS beats
+        // an unnest query for this dataset size.
+        const { rows } = await fetchFiltered(db, args, 5000);
+        const buckets = new Map<
+          string,
+          { spent: number; received: number; net: number; count: number }
+        >();
+        for (const r of rows) {
+          const amount = Number(r.amount);
+          const key = r.tags.length > 0 ? r.tags.join(", ") : "(untagged)";
+          const b = buckets.get(key) ?? { spent: 0, received: 0, net: 0, count: 0 };
+          if (amount < 0) b.spent += -amount;
+          else b.received += amount;
+          b.net += amount;
+          b.count += 1;
+          buckets.set(key, b);
+        }
+        const all = [...buckets.entries()]
+          .map(([key, b]) => ({ key, ...b }))
+          .sort((a, b) => b.spent - a.spent);
+        bucketCount = all.length;
+        sorted = all.slice(0, 30);
+      } else {
+        const applyFilters = await buildFilter(db, args);
+        const keyExpr =
           groupBy === "month"
-            ? r.booking_date.slice(0, 7)
+            ? sql<string>`to_char(transactions.booking_date, 'YYYY-MM')`
             : groupBy === "merchant"
-              ? (r.merchant_name ?? "(no merchant)")
-              : groupBy === "tag"
-                ? r.tags.length > 0
-                  ? r.tags.join(", ")
-                  : "(untagged)"
-                : (r.category_name ?? "Uncategorized");
-        const b = buckets.get(key) ?? { spent: 0, received: 0, net: 0, count: 0 };
-        if (amount < 0) b.spent += -amount;
-        else b.received += amount;
-        b.net += amount;
-        b.count += 1;
-        buckets.set(key, b);
-      }
-      const sorted = [...buckets.entries()]
-        .map(([key, b]) => ({ key, ...b }))
-        .sort((a, b) =>
-          groupBy === "month" ? a.key.localeCompare(b.key) : b.spent - a.spent
+              ? sql<string>`coalesce(merchants.canonical_name, '(no merchant)')`
+              : sql<string>`coalesce(categories.name, 'Uncategorized')`;
+        const grouped: {
+          key: string;
+          spent: string;
+          received: string;
+          net: string;
+          count: string;
+        }[] = await applyFilters(
+          db
+            .selectFrom("transactions")
+            .leftJoin("categories", "categories.id", "transactions.category_id")
+            .leftJoin("merchants", "merchants.id", "transactions.merchant_id")
         )
-        .slice(0, 30);
-      const result: AggregateResult = { group_by: groupBy, buckets: sorted };
+          .select([
+            keyExpr.as("key"),
+            sql<string>`coalesce(sum(case when transactions.amount < 0 then -transactions.amount else 0 end), 0)`.as(
+              "spent"
+            ),
+            sql<string>`coalesce(sum(case when transactions.amount > 0 then transactions.amount else 0 end), 0)`.as(
+              "received"
+            ),
+            sql<string>`coalesce(sum(transactions.amount), 0)`.as("net"),
+            sql<string>`count(*)`.as("count"),
+          ])
+          .groupBy(keyExpr)
+          .execute();
+        const all = grouped
+          .map((g) => ({
+            key: g.key,
+            spent: Number(g.spent),
+            received: Number(g.received),
+            net: Number(g.net),
+            count: Number(g.count),
+          }))
+          .sort((a, b) =>
+            groupBy === "month" ? a.key.localeCompare(b.key) : b.spent - a.spent
+          );
+        bucketCount = all.length;
+        sorted = all.slice(0, 30);
+      }
+
+      const result: AggregateResult = {
+        group_by: groupBy,
+        buckets: sorted,
+        bucket_count: bucketCount,
+      };
       return {
         forModel: JSON.stringify(result),
         render: { tool: "aggregate_transactions", result },
@@ -334,17 +489,8 @@ export async function executeTool(
     }
 
     case "list_categories": {
-      const categories = await db
-        .selectFrom("categories")
-        .select(["id", "name", "parent_id"])
-        .execute();
-      const byId = new Map(categories.map((c) => [c.id, c]));
-      const paths = categories.map((c) => {
-        const parent = c.parent_id ? byId.get(c.parent_id) : null;
-        return parent ? `${parent.name} > ${c.name}` : c.name;
-      });
       return {
-        forModel: JSON.stringify(paths.sort()),
+        forModel: JSON.stringify(await categoryPaths(db)),
         render: null,
         label: "Looked up categories",
       };
