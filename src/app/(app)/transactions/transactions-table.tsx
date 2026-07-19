@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MessageSquarePlus, Trash2, X } from "lucide-react";
 import type { Category, TransactionWithRelations } from "@/lib/types";
+import { categoryPaths } from "@/lib/categories";
 import { parseBnpDescriptor } from "@/lib/statements/bnp";
 import { deleteTransactions, updateTransaction } from "./actions";
 import { Badge } from "@/components/ui/badge";
@@ -33,16 +34,6 @@ function eur(n: number, currency = "EUR") {
   return new Intl.NumberFormat("nl-BE", { style: "currency", currency }).format(n);
 }
 
-function categoryPaths(categories: Category[]) {
-  const byId = new Map(categories.map((c) => [c.id, c]));
-  return categories
-    .map((c) => {
-      const parent = c.parent_id ? byId.get(c.parent_id) : null;
-      return { id: c.id, path: parent ? `${parent.name} > ${c.name}` : c.name };
-    })
-    .sort((a, b) => a.path.localeCompare(b.path));
-}
-
 export function TransactionsTable({
   transactions,
   categories,
@@ -62,6 +53,12 @@ export function TransactionsTable({
   useEffect(() => setSelected(new Set()), [rowKey]);
 
   const paths = categoryPaths(categories);
+  // Top-level categories that have children: picking the bare parent for such
+  // a category means "general — none of its subcategories" (see the filter's
+  // "General" option), so label it that way to keep manual edits consistent.
+  const childfulParentIds = new Set(
+    categories.filter((c) => c.parent_id).map((c) => c.parent_id)
+  );
   const allSelected =
     transactions.length > 0 && transactions.every((t) => selected.has(t.id));
 
@@ -294,7 +291,7 @@ export function TransactionsTable({
                     <option value="">Uncategorized</option>
                     {paths.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.path}
+                        {childfulParentIds.has(p.id) ? `${p.path} (general)` : p.path}
                       </option>
                     ))}
                   </select>
