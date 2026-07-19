@@ -11,10 +11,11 @@ import {
   YAxis,
 } from "recharts";
 
-// Validated palette (dataviz six-checks, light surface):
-// teal = money in, rose = money out.
-const INCOME_COLOR = "#0d9488";
-const SPEND_COLOR = "#e11d48";
+import { categoryColor } from "@/lib/category-colors";
+
+// Warm-paper palette: muted forest green = money in, burnt sienna = money out.
+const INCOME_COLOR = "#4b6b52";
+const SPEND_COLOR = "#c9754a";
 
 function eur(n: number) {
   return new Intl.NumberFormat("nl-BE", {
@@ -30,7 +31,7 @@ export function MonthlyTrendChart({ data }: { data: MonthlyPoint[] }) {
   return (
     <ResponsiveContainer width="100%" height={240}>
       <BarChart data={data} barGap={2} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-        <CartesianGrid vertical={false} stroke="#00000010" />
+        <CartesianGrid vertical={false} stroke="var(--border)" />
         <XAxis
           dataKey="month"
           tickLine={false}
@@ -49,7 +50,15 @@ export function MonthlyTrendChart({ data }: { data: MonthlyPoint[] }) {
             eur(Number(value)),
             name === "income" ? "Received" : "Spent",
           ]}
-          cursor={{ fill: "#00000008" }}
+          cursor={{ fill: "var(--accent)" }}
+          contentStyle={{
+            background: "var(--popover)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            fontSize: 12,
+            color: "var(--popover-foreground)",
+          }}
+          labelStyle={{ color: "var(--muted-foreground)" }}
         />
         <Legend
           formatter={(value: string) => (
@@ -81,14 +90,14 @@ export function CategoryBars({ data }: { data: CategorySpend[] }) {
         <li key={d.name}>
           <div className="mb-1 flex items-baseline justify-between text-sm">
             <span className="font-medium">{d.name}</span>
-            <span className="text-muted-foreground">{eur(d.value)}</span>
+            <span className="figure text-muted-foreground">{eur(d.value)}</span>
           </div>
           <div className="h-2 w-full rounded-full bg-muted">
             <div
               className="h-2 rounded-full"
               style={{
                 width: `${Math.max(2, (d.value / max) * 100)}%`,
-                backgroundColor: d.color ?? "#64748b",
+                backgroundColor: categoryColor(d.name),
               }}
             />
           </div>

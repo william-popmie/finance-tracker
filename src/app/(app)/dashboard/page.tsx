@@ -28,14 +28,34 @@ function eur(n: number) {
   }).format(n);
 }
 
+// Local calendar helpers. Never use toISOString() for month math — it shifts
+// the day across the UTC boundary and mislabels months in +offset timezones.
+const ymd = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+const ym = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+
 export default async function DashboardPage() {
-  const now = new Date();
-  const monthStartIso = new Date(now.getFullYear(), now.getMonth(), 1)
-    .toISOString()
-    .slice(0, 10);
-  const sixMonthsAgoIso = new Date(now.getFullYear(), now.getMonth() - 5, 1)
-    .toISOString()
-    .slice(0, 10);
+  // The tracker is retrospective: anchor "this month" to the latest month that
+  // actually has activity, not the current calendar month (which is often empty
+  // between statement uploads). Matches the front page.
+  const maxRow = await db
+    .selectFrom("transactions")
+    .select(db.fn.max("booking_date").as("max"))
+    .executeTakeFirst();
+  const anchor = maxRow?.max
+    ? (() => {
+        const [y, m, d] = String(maxRow.max).slice(0, 10).split("-").map(Number);
+        return new Date(y, m - 1, d);
+      })()
+    : new Date();
+
+  const monthStartIso = ymd(new Date(anchor.getFullYear(), anchor.getMonth(), 1));
+  const sixMonthsAgoIso = ymd(
+    new Date(anchor.getFullYear(), anchor.getMonth() - 5, 1)
+  );
 
   const [windowTx, recent, countRow, categories, openInsights, proposedExpectations] =
     await Promise.all([
@@ -86,8 +106,8 @@ export default async function DashboardPage() {
   // Monthly income vs spending, last 6 months.
   const monthly = new Map<string, MonthlyPoint>();
   for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = d.toISOString().slice(0, 7);
+    const d = new Date(anchor.getFullYear(), anchor.getMonth() - i, 1);
+    const key = ym(d);
     monthly.set(key, {
       month: d.toLocaleDateString("en", { month: "short" }),
       income: 0,
@@ -128,15 +148,24 @@ export default async function DashboardPage() {
     .sort((a, b) => b.value - a.value)
     .slice(0, 8);
 
+  const monthLabel = anchor.toLocaleDateString("en", {
+    month: "long",
+    year: "numeric",
+  });
+  const net = monthReceived - monthSpent;
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
+    <div className="space-y-7">
+      <header>
+        <p className="eyebrow">{monthLabel}</p>
+        <h1 className="mt-1 text-3xl font-medium tracking-tight">Dashboard</h1>
+      </header>
 
       {totalCount === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
             No transactions yet.{" "}
-            <Link href="/upload" className="font-medium text-foreground underline">
+            <Link href="/upload" className="font-medium text-brand-strong underline">
               Upload your first statement
             </Link>{" "}
             to get started.
@@ -151,39 +180,40 @@ export default async function DashboardPage() {
 
           <div className="grid gap-4 sm:grid-cols-3">
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Spent this month
-                </CardTitle>
+              <CardHeader className="pb-1">
+                <CardTitle className="eyebrow font-sans">Spent this month</CardTitle>
               </CardHeader>
-              <CardContent className="text-2xl font-semibold text-[#e11d48]">
+              <CardContent className="font-serif text-3xl font-medium tabular-nums">
                 {eur(monthSpent)}
               </CardContent>
             </Card>
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Received this month
-                </CardTitle>
+              <CardHeader className="pb-1">
+                <CardTitle className="eyebrow font-sans">Received this month</CardTitle>
               </CardHeader>
-              <CardContent className="text-2xl font-semibold text-[#0d9488]">
+              <CardContent className="font-serif text-3xl font-medium tabular-nums text-pos">
                 {eur(monthReceived)}
               </CardContent>
             </Card>
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Total transactions
-                </CardTitle>
+              <CardHeader className="pb-1">
+                <CardTitle className="eyebrow font-sans">Net this month</CardTitle>
               </CardHeader>
-              <CardContent className="text-2xl font-semibold">{totalCount}</CardContent>
+              <CardContent
+                className={`font-serif text-3xl font-medium tabular-nums ${
+                  net >= 0 ? "text-pos" : ""
+                }`}
+              >
+                {net >= 0 ? "+" : ""}
+                {eur(net)}
+              </CardContent>
             </Card>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Last 6 months</CardTitle>
+                <CardTitle>Last 6 months</CardTitle>
               </CardHeader>
               <CardContent>
                 <MonthlyTrendChart data={[...monthly.values()]} />
@@ -191,9 +221,7 @@ export default async function DashboardPage() {
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">
-                  This month&apos;s spending by category
-                </CardTitle>
+                <CardTitle>This month&apos;s spending by category</CardTitle>
               </CardHeader>
               <CardContent>
                 {categorySpend.length === 0 ? (
@@ -209,23 +237,27 @@ export default async function DashboardPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Recent transactions</CardTitle>
+              <CardTitle>Recent transactions</CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="divide-y">
+              <ul className="divide-y divide-border">
                 {recent.map((t) => (
                   <li
                     key={t.id}
-                    className="flex items-center justify-between py-2 text-sm"
+                    className="flex items-center justify-between gap-4 py-2.5 text-sm"
                   >
                     <div className="min-w-0">
                       <p className="truncate font-medium">
                         {t.description || t.counterparty_name || t.raw_description}
                       </p>
-                      <p className="text-xs text-muted-foreground">{t.booking_date}</p>
+                      <p className="font-mono text-xs text-muted-foreground">
+                        {t.booking_date}
+                      </p>
                     </div>
                     <span
-                      className={t.amount < 0 ? "text-[#e11d48]" : "text-[#0d9488]"}
+                      className={`figure shrink-0 ${
+                        t.amount < 0 ? "text-foreground" : "text-pos"
+                      }`}
                     >
                       {eur(Number(t.amount))}
                     </span>
