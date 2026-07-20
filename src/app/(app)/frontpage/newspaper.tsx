@@ -5,7 +5,7 @@ function eur(n: number, currency = "EUR") {
   return new Intl.NumberFormat("nl-BE", { style: "currency", currency }).format(n);
 }
 
-function Masthead({ edition }: { edition: Edition }) {
+export function Masthead({ edition }: { edition: Edition }) {
   const { nameplate, dateline } = edition;
   return (
     <header>
@@ -37,7 +37,7 @@ function Masthead({ edition }: { edition: Edition }) {
   );
 }
 
-function Figure({ edition }: { edition: Edition }) {
+export function Figure({ edition }: { edition: Edition }) {
   const max = Math.max(...edition.figure.map((f) => f.value), 1);
   return (
     <figure className="my-3 border-y border-border py-2.5">
@@ -60,7 +60,7 @@ function Figure({ edition }: { edition: Edition }) {
   );
 }
 
-function LeadStory({ edition }: { edition: Edition }) {
+export function LeadStory({ edition }: { edition: Edition }) {
   const { lead } = edition;
   return (
     <div className="md:pr-5">
@@ -84,7 +84,7 @@ function LeadStory({ edition }: { edition: Edition }) {
   );
 }
 
-function CategoryColumn({ edition }: { edition: Edition }) {
+export function CategoryColumn({ edition }: { edition: Edition }) {
   if (edition.articles.length === 0) return <div className="hidden md:block" />;
   return (
     <div className="md:border-x md:border-border md:px-4">
@@ -102,7 +102,7 @@ function CategoryColumn({ edition }: { edition: Edition }) {
   );
 }
 
-function NumbersBox({ edition }: { edition: Edition }) {
+export function NumbersBox({ edition }: { edition: Edition }) {
   const { numbers } = edition;
   const rows: [string, string, string?][] = [
     ["Spent", eur(numbers.spent)],
@@ -132,7 +132,7 @@ function NumbersBox({ edition }: { edition: Edition }) {
   );
 }
 
-function MerchantIndex({ edition }: { edition: Edition }) {
+export function MerchantIndex({ edition }: { edition: Edition }) {
   if (edition.merchants.length === 0) return null;
   return (
     <div>
@@ -151,7 +151,7 @@ function MerchantIndex({ edition }: { edition: Edition }) {
   );
 }
 
-function ForecastBox({ edition }: { edition: Edition }) {
+export function ForecastBox({ edition }: { edition: Edition }) {
   return (
     <div className="mt-3.5 bg-secondary px-3 py-2.5">
       <div className="np-kicker !text-foreground">Forecast</div>
@@ -162,7 +162,7 @@ function ForecastBox({ edition }: { edition: Edition }) {
   );
 }
 
-function Ticker({ edition }: { edition: Edition }) {
+export function Ticker({ edition }: { edition: Edition }) {
   if (edition.ticker.length === 0) return null;
   return (
     <>

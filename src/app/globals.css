@@ -200,3 +200,417 @@
     padding: 5px 0;
   }
 }
+
+/* ========================================================================
+   THE LEDGER — skeuomorphic flip-book (route: /book)
+   A bound book centered on screen. Cover → newspaper spread → transaction
+   register. Reuses the .newspaper typography scope on the front-page leaves.
+   ======================================================================== */
+
+.book-root {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 100vh;
+  padding: 1.5rem 1rem;
+  overflow: hidden;
+  /* Warm reading room: paper tone with a soft vignette so the book sits in a
+     pool of light. */
+  background:
+    radial-gradient(120% 80% at 50% 32%, #f6f2ea 0%, var(--background) 58%, #e7e0d2 100%);
+}
+
+.book-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--secondary) 70%, transparent);
+  border-radius: 0.5rem;
+}
+
+.book-layout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  max-width: 100%;
+}
+
+/* --- Bookmark tab rail --- */
+.book-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+.book-tab {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--muted-foreground);
+  background: color-mix(in srgb, var(--card) 82%, transparent);
+  border: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  border-radius: 0 4px 4px 0;
+  padding: 0.55rem 0.7rem;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s, transform 0.15s;
+  box-shadow: 1px 1px 0 rgba(36, 34, 32, 0.04);
+}
+.book-tab:hover {
+  color: var(--foreground);
+  transform: translateX(2px);
+}
+.book-tab-active {
+  color: var(--brand-strong);
+  border-left-color: var(--brand);
+  background: var(--card);
+  font-weight: 500;
+}
+
+/* --- The book itself --- */
+.book-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  /* A definite width lets page-flip expand into a two-page landscape spread
+     instead of collapsing to a single portrait leaf. */
+  width: min(1040px, 88vw);
+  perspective: 2200px;
+}
+.book-mount {
+  /* page-flip sizes this element; the ground shadow reads as a book resting
+     on the surface. */
+  filter: drop-shadow(0 22px 30px rgba(36, 28, 20, 0.24));
+  touch-action: pan-y;
+}
+
+/* Every leaf: bone paper with a faint grain and inner gutter shading. */
+.book-page {
+  background-color: var(--card);
+  background-image:
+    linear-gradient(90deg, rgba(36, 34, 32, 0.05) 0%, rgba(36, 34, 32, 0) 5%,
+      rgba(36, 34, 32, 0) 95%, rgba(36, 34, 32, 0.05) 100%),
+    repeating-linear-gradient(0deg, rgba(36, 34, 32, 0.012) 0 2px, transparent 2px 4px);
+  color: var(--foreground);
+  box-shadow: inset 0 0 40px rgba(36, 28, 20, 0.05);
+  overflow: hidden;
+}
+.book-page-inner {
+  height: 100%;
+  padding: 22px 22px 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* --- Front & back cover (hard leaf) --- */
+.book-cover {
+  background-color: #2c2018;
+  background-image:
+    radial-gradient(130% 110% at 30% 18%, #453225 0%, #2c2018 55%, #1f1610 100%),
+    repeating-linear-gradient(48deg, rgba(255, 255, 255, 0.015) 0 2px, transparent 2px 5px);
+  color: #efe6d6;
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.45);
+}
+.book-cover-inner {
+  height: 100%;
+  padding: 26px;
+  display: flex;
+}
+.book-cover-frame {
+  flex: 1;
+  border: 1px solid rgba(201, 117, 74, 0.5);
+  border-radius: 2px;
+  padding: 30px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-shadow: inset 0 0 0 4px rgba(239, 230, 214, 0.05);
+}
+.book-cover-kicker {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(239, 230, 214, 0.62);
+}
+.book-cover-title {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: clamp(1.9rem, 5.5vw, 2.7rem);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  margin: 1.1rem 0;
+  color: #f3ebdd;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.14), 0 -1px 1px rgba(0, 0, 0, 0.5);
+}
+.book-cover-rule {
+  width: 46px;
+  height: 2px;
+  background: var(--brand);
+  margin: 0.2rem 0 1rem;
+}
+.book-cover-tagline {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(239, 230, 214, 0.7);
+}
+.book-cover-foot {
+  margin-top: auto;
+  padding-top: 1.4rem;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(239, 230, 214, 0.55);
+}
+
+/* --- Colophon leaf --- */
+.book-colophon {
+  justify-content: center;
+}
+.book-colophon-lede {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 15px;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--foreground) 88%, transparent);
+  margin-top: 0.5rem;
+}
+.book-colophon-rule {
+  border-top: 1px solid var(--foreground);
+  margin: 1.2rem 0;
+}
+.book-colophon-index-row {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+.book-colophon-note {
+  margin-top: auto;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+/* --- Newspaper leaves: nudge the standalone type down to leaf scale --- */
+.book-newspaper {
+  font-size: 0.92em;
+}
+.book-newspaper .np-body {
+  text-align: left;
+}
+
+/* --- Chapter divider --- */
+.book-ledger-chapter {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.book-chapter-title {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: clamp(2rem, 5vw, 2.6rem);
+  letter-spacing: -0.02em;
+  margin-top: 0.6rem;
+}
+.book-chapter-rule {
+  width: 60%;
+  border-top: 3px solid var(--foreground);
+  margin: 1rem 0;
+}
+.book-chapter-sub {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 14px;
+  color: color-mix(in srgb, var(--foreground) 80%, transparent);
+  max-width: 26ch;
+}
+.book-chapter-meta {
+  margin-top: 1.6rem;
+  display: flex;
+  gap: 1.2rem;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+/* --- The register (ledger table) --- */
+.book-ledger {
+  gap: 0;
+}
+.book-ledger-head,
+.book-ledger-row {
+  display: grid;
+  grid-template-columns: 58px 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+}
+.book-ledger-head {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--foreground);
+}
+.book-ledger-head .book-ledger-col-amt,
+.book-ledger-row .book-ledger-col-amt {
+  text-align: right;
+}
+.book-ledger-rows {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.book-ledger-row {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.book-ledger-col-date {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+.book-ledger-col-entry {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.book-ledger-label {
+  font-family: var(--font-serif);
+  font-size: 13.5px;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.book-ledger-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+.book-ledger-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+.book-ledger-col-amt {
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.book-ledger-foot {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--foreground);
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.book-ledger-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  text-align: center;
+  font-family: var(--font-serif);
+  font-size: 14px;
+}
+
+/* --- Controls under the book --- */
+.book-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.book-arrow {
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.book-arrow:hover {
+  background: var(--secondary);
+  border-color: var(--brand);
+}
+.book-counter {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--muted-foreground);
+  min-width: 4ch;
+  text-align: center;
+}
+
+/* --- Responsive: stack the tabs above the book on narrow screens --- */
+@media (max-width: 720px) {
+  .book-layout {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .book-tabs {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .book-tab {
+    border-left: 1px solid var(--border);
+    border-bottom: 3px solid transparent;
+    border-radius: 4px 4px 0 0;
+  }
+  .book-tab-active {
+    border-left-color: var(--border);
+    border-bottom-color: var(--brand);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .book-tab {
+    transition: none;
+  }
+}
