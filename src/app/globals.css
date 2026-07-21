@@ -289,20 +289,45 @@
   flex-direction: column;
   align-items: center;
   gap: 0.9rem;
-  /* A definite width lets page-flip expand into a two-page landscape spread
-     instead of collapsing to a single portrait leaf. */
+  /* A definite width gives the engine room for a two-page spread. Narrow
+     viewports scale the spread down rather than switching to a single page. */
   width: min(1040px, 88vw);
-  perspective: 2200px;
+  /* No `perspective`: the soft curl is clip-path plus a 2D rotate, with no 3D
+     transform anywhere. Reinstate this if a rigid-cover renderer returns — and
+     see the filter warning on .book-page when you do. */
 }
 .book-mount {
-  /* page-flip sizes this element; the ground shadow reads as a book resting
-     on the surface. */
-  filter: drop-shadow(0 22px 30px rgba(36, 28, 20, 0.24));
+  /* The engine positions pages absolutely inside this box and reads its size to
+     lay out the spread. The aspect matches two 440x600 pages; the max-height
+     matches the engine's maxPageWidth cap so wide viewports stay in step. */
+  position: relative;
+  width: 100%;
+  aspect-ratio: 880 / 600;
+  max-height: 655px;
+  /* pan-y keeps vertical scrolling usable on touch while leaving horizontal
+     drags to the page-turn gesture. */
   touch-action: pan-y;
+  /* Pages are hidden until the engine has laid them out, otherwise they all
+     stack at the origin for a frame. */
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.book-mount[data-flip-ready] {
+  opacity: 1;
 }
 
-/* Every leaf: bone paper with a faint grain and inner gutter shading. */
+/* Every leaf: bone paper with a faint grain and inner gutter shading.
+   NOTE: the engine writes `filter: drop-shadow(...)` inline on whichever pages
+   are resting in a slot, so the book's shadow follows each page's real shape
+   and peels away with it mid-turn. Do not move that shadow to an ancestor:
+   a rectangular shadow element cannot track a page that is folding, and a
+   non-`none` filter on an ancestor would also force `transform-style: flat`,
+   which is what once broke the rigid cover's rotateY. */
 .book-page {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: none;
   background-color: var(--card);
   background-image:
     linear-gradient(90deg, rgba(36, 34, 32, 0.05) 0%, rgba(36, 34, 32, 0) 5%,
@@ -311,6 +336,22 @@
   color: var(--foreground);
   box-shadow: inset 0 0 40px rgba(36, 28, 20, 0.05);
   overflow: hidden;
+  will-change: transform, clip-path;
+}
+/* The in-flight copy of a page. The original stays flat underneath so the
+   un-turned remainder keeps rendering; only the clone is clipped to the fold. */
+.book-flight-clone {
+  pointer-events: none;
+}
+/* Auto-inserted when the page count is odd, so no page is left unreachable. */
+.book-page-blank {
+  background-image: none;
+}
+/* Gradient bands that give the curl its depth, one pair per turn in flight. */
+.book-shadow {
+  position: absolute;
+  display: none;
+  pointer-events: none;
 }
 .book-page-inner {
   height: 100%;
