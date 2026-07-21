@@ -29,7 +29,7 @@ export function LedgerChapter({
   return (
     <div className="book-page">
       <div className="book-page-inner book-ledger-chapter">
-        <div className="np-kicker">Part Two</div>
+        <div className="np-kicker">Chapter One</div>
         <h2 className="book-chapter-title">The Register</h2>
         <div className="book-chapter-rule" />
         <p className="book-chapter-sub">

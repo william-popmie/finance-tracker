@@ -240,16 +240,19 @@
 
 .book-layout {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1.25rem;
+  gap: 0.9rem;
   max-width: 100%;
 }
 
-/* --- Bookmark tab rail --- */
+/* --- Bookmark tab row (centered, above the book) --- */
 .book-tabs {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 0.4rem;
   flex-shrink: 0;
 }
@@ -258,24 +261,24 @@
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  text-align: left;
+  text-align: center;
   color: var(--muted-foreground);
   background: color-mix(in srgb, var(--card) 82%, transparent);
   border: 1px solid var(--border);
-  border-left: 3px solid transparent;
-  border-radius: 0 4px 4px 0;
-  padding: 0.55rem 0.7rem;
+  border-bottom: 3px solid transparent;
+  border-radius: 4px 4px 0 0;
+  padding: 0.5rem 0.85rem;
   cursor: pointer;
   transition: color 0.15s, background 0.15s, border-color 0.15s, transform 0.15s;
-  box-shadow: 1px 1px 0 rgba(36, 34, 32, 0.04);
+  box-shadow: 0 1px 0 rgba(36, 34, 32, 0.04);
 }
 .book-tab:hover {
   color: var(--foreground);
-  transform: translateX(2px);
+  transform: translateY(-1px);
 }
 .book-tab-active {
   color: var(--brand-strong);
-  border-left-color: var(--brand);
+  border-bottom-color: var(--brand);
   background: var(--card);
   font-weight: 500;
 }
@@ -580,33 +583,38 @@
   border-color: var(--brand);
 }
 .book-counter {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
   font-size: 11px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   color: var(--muted-foreground);
-  min-width: 4ch;
-  text-align: center;
 }
-
-/* --- Responsive: stack the tabs above the book on narrow screens --- */
-@media (max-width: 720px) {
-  .book-layout {
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-  .book-tabs {
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-  .book-tab {
-    border-left: 1px solid var(--border);
-    border-bottom: 3px solid transparent;
-    border-radius: 4px 4px 0 0;
-  }
-  .book-tab-active {
-    border-left-color: var(--border);
-    border-bottom-color: var(--brand);
-  }
+.book-counter-input {
+  width: 3.2ch;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: right;
+  color: var(--foreground);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dashed var(--border);
+  padding: 0 1px 1px;
+  outline: none;
+  -moz-appearance: textfield;
+  transition: border-color 0.15s;
+}
+.book-counter-input:hover {
+  border-bottom-color: var(--muted-foreground);
+}
+.book-counter-input:focus {
+  border-bottom-color: var(--brand);
+}
+.book-counter-input:disabled {
+  opacity: 0.5;
+}
+.book-counter-total {
+  color: var(--muted-foreground);
 }
 
 @media (prefers-reduced-motion: reduce) {
