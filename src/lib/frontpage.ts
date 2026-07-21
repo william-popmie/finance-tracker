@@ -315,7 +315,7 @@ export function buildEdition(input: BuildInput): Edition {
 
   return {
     nameplate: {
-      title: "The Monthly Ledger",
+      title: "The Ledger",
       tagline: "Your money, in black and white",
     },
     dateline: {
